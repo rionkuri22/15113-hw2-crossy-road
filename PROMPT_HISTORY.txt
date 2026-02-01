@@ -1,4 +1,6 @@
-Pro model: https://gemini.google.com/share/57fb5496b81e
-Fast model (was better!): https://gemini.google.com/share/b079b32f8381
+Model: Gemini (mix of fast and pro)
+
+1st chat: https://gemini.google.com/share/57fb5496b81e
+2nd chat: https://gemini.google.com/share/b079b32f8381
 
 General strategy: Detailed prompt with full list of features. But had Gemini create the list of features itself. 

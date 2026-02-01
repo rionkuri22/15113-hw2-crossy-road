@@ -19,9 +19,17 @@ COLOR_GRASS_LIGHT = (110, 205, 55)
 COLOR_GRASS_DARK = (95, 190, 45)
 COLOR_ROAD = (85, 90, 100)
 COLOR_WATER = (80, 180, 240)
-COLOR_RAIL = (80, 80, 80) # Gravel color
-COLOR_RAIL_WOOD = (90, 60, 30)
+
+# Rail & Train Colors
+COLOR_RAIL_GRAVEL = (70, 70, 70)
+COLOR_RAIL_WOOD = (90, 60, 40)
 COLOR_RAIL_METAL = (160, 160, 170)
+COLOR_TRAIN_BODY = (180, 30, 30)
+COLOR_TRAIN_ROOF = (210, 210, 210)
+COLOR_TRAIN_WINDOW = (50, 50, 80)
+COLOR_SIGNAL_POLE = (50, 50, 50)
+COLOR_SIGNAL_LIGHT_OFF = (80, 0, 0)
+COLOR_SIGNAL_LIGHT_ON = (255, 0, 0)
 
 COLOR_COIN = (255, 215, 0)
 COLOR_CHICKEN = (255, 255, 255)
@@ -30,16 +38,10 @@ COLOR_CHICKEN_COMB = (255, 40, 40)
 COLOR_SHADOW = (0, 0, 0, 70) 
 COLOR_STONE = (160, 160, 160)
 
-# Train Colors
-COLOR_TRAIN_BODY = (70, 130, 180) # Steel Blue
-COLOR_TRAIN_ROOF = (200, 200, 220)
-COLOR_SIGNAL_POLE = (50, 50, 50)
-COLOR_SIGNAL_LIGHT_OFF = (80, 0, 0)
-COLOR_SIGNAL_LIGHT_ON = (255, 0, 0)
-
-# --- 3D Rendering Engine ---
+# --- 3D Rendering Engine (Restored) ---
 
 def to_screen(gx, gy, z=0):
+    # This is the projection from your "Good Visuals" code
     screen_x = (gx - gy) * TILE_SIZE
     screen_y = (gx + gy) * TILE_HEIGHT / 2
     return screen_x, screen_y - (z * Z_SCALE)
@@ -74,6 +76,7 @@ class Coin:
     def draw(self, surface, cam_x, cam_y):
         self.rot += 0.1
         bounce = math.sin(self.rot) * 2 + 5
+        # Rounder coin with red 'C'
         draw_block(surface, self.x + 0.35, self.y + 0.2, bounce, 0.3, 0.6, 1.5, COLOR_COIN, cam_x, cam_y)
         draw_block(surface, self.x + 0.2, self.y + 0.35, bounce, 0.6, 0.3, 1.5, COLOR_COIN, cam_x, cam_y)
         draw_block(surface, self.x + 0.4, self.y + 0.4, bounce + 0.5, 0.2, 0.2, 1, (200, 0, 0), cam_x, cam_y)
@@ -85,7 +88,8 @@ class Object:
         
     def update(self):
         self.x += self.speed
-        if abs(self.x) > 60: self.active = False
+        limit = 60 if self.type == "train" else 40
+        if abs(self.x) > limit: self.active = False
 
     def draw(self, surface, cam_x, cam_y):
         if self.type == "tree":
@@ -96,19 +100,22 @@ class Object:
             draw_block(surface, self.x + 0.2, self.lane_y + 0.2, 6, 0.6, 0.6, 3, (180, 180, 180), cam_x, cam_y)
         elif self.type == "car":
             color = (230, 80, 80) if abs(self.lane_y) % 2 == 0 else (120, 175, 55)
+            # Wheels
             for ox, oy in [(0.2, 0.1), (1.1, 0.1), (0.2, 0.7), (1.1, 0.7)]:
                 draw_block(surface, self.x + ox, self.lane_y + oy, 0, 0.3, 0.2, 4, (30,30,30), cam_x, cam_y)
+            # Body
             draw_block(surface, self.x, self.lane_y + 0.1, 3, 1.6, 0.8, 7, color, cam_x, cam_y)
+            # Cabin
             draw_block(surface, self.x + 0.3, self.lane_y + 0.15, 10, 1.0, 0.7, 6, (240, 245, 255), cam_x, cam_y)
         elif self.type == "log":
             draw_block(surface, self.x, self.lane_y + 0.1, -2, 3.5, 0.8, 4, (110, 70, 40), cam_x, cam_y)
         elif self.type == "train":
-            # Train Body
-            draw_block(surface, self.x, self.lane_y, 0, 15, 1, 14, COLOR_TRAIN_BODY, cam_x, cam_y)
+            # Train Body (Very Long X)
+            draw_block(surface, self.x, self.lane_y + 0.05, 1, 15, 0.9, 14, COLOR_TRAIN_BODY, cam_x, cam_y)
             # Roof
-            draw_block(surface, self.x, self.lane_y + 0.05, 14, 15, 0.9, 2, COLOR_TRAIN_ROOF, cam_x, cam_y)
-            # Windows/Stripe
-            draw_block(surface, self.x, self.lane_y - 0.05, 10, 15, 1.1, 3, (220, 220, 255), cam_x, cam_y)
+            draw_block(surface, self.x, self.lane_y + 0.05, 15, 15, 0.9, 2, COLOR_TRAIN_ROOF, cam_x, cam_y)
+            # Stripe
+            draw_block(surface, self.x, self.lane_y - 0.05, 11, 15, 1.1, 2, COLOR_TRAIN_WINDOW, cam_x, cam_y)
 
 class Lane:
     def __init__(self, y_index, type_id):
@@ -117,72 +124,69 @@ class Lane:
         self.speed = random.uniform(0.06, 0.14)
         self.timer = 0
         self.coin = None
+        
+        # Rail specific
+        self.train_timer = random.randint(0, 300)
         self.train_warning = False
-        self.train_timer = 0
         
         if self.type == 'grass':
             for x in range(-12, 13):
-                if random.random() < 0.2 and abs(x) > 1:
+                # Ensure center path (x=0) is clear
+                if x != 0 and random.random() < 0.2:
                     obj_type = "stone" if random.random() > 0.6 else "tree"
                     self.objects.append(Object(x, self.y, 0, obj_type))
             if random.random() < 0.1: self.coin = Coin(random.randint(-5, 5), self.y)
         elif self.type == 'road' or self.type == 'water':
             if random.random() < 0.1: self.coin = Coin(random.randint(-5, 5), self.y)
-        elif self.type == 'rail':
-             self.train_timer = random.randint(0, 200) # Offset start times
 
     def update(self):
         for obj in self.objects: obj.update()
         self.objects = [o for o in self.objects if o.active]
         
         self.timer += 1
-        
         if self.type == 'road' and self.timer > 140:
             self.objects.append(Object(-25 if self.direction == 1 else 25, self.y, self.speed * self.direction, "car"))
             self.timer = 0
-        elif self.type == 'water' and self.timer > 90: # Wooden blocks come more often (was 180)
+        elif self.type == 'water' and self.timer > 120:
             self.objects.append(Object(-30 if self.direction == 1 else 30, self.y, self.speed * self.direction, "log"))
             self.timer = 0
         elif self.type == 'rail':
             self.train_timer += 1
-            # Warning Phase
-            if self.train_timer > 400:
+            if self.train_timer > 350 and self.train_timer < 420:
                 self.train_warning = True
-            # Spawn Phase
-            if self.train_timer > 460:
-                self.objects.append(Object(-50, self.y, 1.8, "train")) # Fast speed
-                self.train_timer = 0
+            elif self.train_timer == 420:
+                self.objects.append(Object(-50, self.y, 2.0, "train"))
+            elif self.train_timer > 550:
                 self.train_warning = False
+                self.train_timer = 0
 
     def draw_terrain(self, surface, cam_x, cam_y):
-        p1, p2, p3, p4 = to_screen(-35, self.y), to_screen(35, self.y), to_screen(35, self.y + 1), to_screen(-35, self.y + 1)
+        # Draw strip across X axis
+        p1 = to_screen(-35, self.y)
+        p2 = to_screen(35, self.y)
+        p3 = to_screen(35, self.y + 1)
+        p4 = to_screen(-35, self.y + 1)
         poly = [(px + cam_x, py + cam_y) for px, py in [p1, p2, p3, p4]]
         
-        color = COLOR_ROAD if self.type == 'road' else COLOR_WATER if self.type == 'water' else COLOR_RAIL if self.type == 'rail' else \
+        color = COLOR_ROAD if self.type == 'road' else COLOR_WATER if self.type == 'water' else COLOR_RAIL_GRAVEL if self.type == 'rail' else \
                 (COLOR_GRASS_DARK if self.y % 2 == 0 else COLOR_GRASS_LIGHT)
         pygame.draw.polygon(surface, color, poly)
         
         if self.type == 'rail':
-            # Draw Sleepers (Wood)
-            for x in range(-15, 16, 2):
+            # Sleepers
+            for x in range(-20, 21, 2):
                 draw_block(surface, x, self.y + 0.1, 0, 0.6, 0.8, 1, COLOR_RAIL_WOOD, cam_x, cam_y)
-            # Draw Rails (Metal lines)
-            # Use draw_block for rails to match depth style, just very long blocks
-            draw_block(surface, -35, self.y + 0.2, 1, 70, 0.1, 1, COLOR_RAIL_METAL, cam_x, cam_y)
-            draw_block(surface, -35, self.y + 0.7, 1, 70, 0.1, 1, COLOR_RAIL_METAL, cam_x, cam_y)
+            # Rails
+            draw_block(surface, -35, self.y + 0.2, 1, 70, 0.15, 1, COLOR_RAIL_METAL, cam_x, cam_y)
+            draw_block(surface, -35, self.y + 0.65, 1, 70, 0.15, 1, COLOR_RAIL_METAL, cam_x, cam_y)
             
-            # Warning Signal Light
+            # Signal
             if self.train_warning:
-                # Flashing logic
-                is_on = (pygame.time.get_ticks() // 150) % 2 == 0
+                is_on = (pygame.time.get_ticks() // 200) % 2 == 0
                 light_c = COLOR_SIGNAL_LIGHT_ON if is_on else COLOR_SIGNAL_LIGHT_OFF
-                
-                # Pole
-                draw_block(surface, -5, self.y - 0.2, 0, 0.2, 0.2, 10, COLOR_SIGNAL_POLE, cam_x, cam_y)
-                # Box
-                draw_block(surface, -5.1, self.y - 0.3, 10, 0.4, 0.4, 2, COLOR_SIGNAL_POLE, cam_x, cam_y)
-                # Light
-                draw_block(surface, -5.15, self.y - 0.35, 10.5, 0.5, 0.1, 1, light_c, cam_x, cam_y)
+                draw_block(surface, -6, self.y - 0.2, 0, 0.2, 0.2, 10, COLOR_SIGNAL_POLE, cam_x, cam_y)
+                draw_block(surface, -6.1, self.y - 0.3, 10, 0.4, 0.4, 2, COLOR_SIGNAL_POLE, cam_x, cam_y)
+                draw_block(surface, -6.15, self.y - 0.35, 10.5, 0.5, 0.1, 1, light_c, cam_x, cam_y)
 
 # --- Main Game Engine ---
 
@@ -195,11 +199,12 @@ class Game:
         self.reset()
 
     def reset(self):
-        self.lanes = {i: Lane(i, 'grass' if i < 3 else random.choice(['grass', 'road', 'water', 'rail'])) for i in range(-5, 30)}
+        self.lanes = {i: Lane(i, 'grass' if i < 3 else random.choice(['grass', 'road', 'road', 'water', 'rail'])) for i in range(-5, 30)}
         self.px, self.py, self.pz = 0, 0, 0
         self.tx, self.ty = 0, 0
         self.is_moving, self.jump_anim = False, 0
         self.score = 0
+        self.max_forward_y = 0 
         self.coins_collected = 0
         self.cam_x, self.cam_y = SCREEN_WIDTH//2, SCREEN_HEIGHT//4
         self.game_over = False
@@ -210,10 +215,8 @@ class Game:
         rect = surf.get_rect()
         if align == "right": rect.topright = (x, y)
         else: rect.topleft = (x, y)
-        
         for off in offsets:
             self.screen.blit(surf, (rect.x + off[0], rect.y + off[1]))
-        
         main_surf = self.font.render(text, True, color)
         self.screen.blit(main_surf, rect)
         return rect
@@ -229,8 +232,10 @@ class Game:
             dx, dy = 0, 0
             if keys[pygame.K_RIGHT]: dx = 1
             elif keys[pygame.K_LEFT]: dx = -1
-            elif keys[pygame.K_UP]: dy = 1
-            elif keys[pygame.K_DOWN]: dy = -1
+            # UP Arrow: In this visual projection, Moving "Up/Forward" on screen means DECREASING Y
+            elif keys[pygame.K_UP]: dy = -1 
+            # DOWN Arrow: Moving "Down/Back" on screen means INCREASING Y
+            elif keys[pygame.K_DOWN]: dy = 1 
             
             if dx != 0 or dy != 0:
                 target_lane = self.lanes.get(self.py + dy)
@@ -246,7 +251,14 @@ class Game:
             self.jump_anim += 0.2
             if self.jump_anim >= 1:
                 self.px, self.py, self.is_moving, self.jump_anim = self.tx, self.ty, False, 0
-                if self.py > self.score: self.score = self.py
+                
+                # --- SCORING LOGIC ---
+                # Since "Forward" is negative Y, we check if we are "more negative" than before
+                # -self.py turns (-1, -2, -3) into (1, 2, 3)
+                if -self.py > self.max_forward_y:
+                    self.score += 1
+                    self.max_forward_y = -int(self.py)
+                    
             self.pz = math.sin(self.jump_anim * math.pi) * 10
 
         current_lane = self.lanes.get(self.py)
@@ -261,23 +273,21 @@ class Game:
 
         if current_lane and not self.is_moving:
             for obj in current_lane.objects:
-                # Car collision
-                if obj.type == "car" and obj.x - 0.5 <= self.px <= obj.x + 1.5:
-                    self.game_over = True
-                # Train collision (Longer hitbox)
-                if obj.type == "train" and obj.x - 0.5 <= self.px <= obj.x + 15:
-                    self.game_over = True
+                if (obj.type == "car" and obj.x - 0.5 <= self.px <= obj.x + 1.5): self.game_over = True
+                if (obj.type == "train" and obj.x - 0.5 <= self.px <= obj.x + 15): self.game_over = True
 
         if current_lane and current_lane.coin and not self.is_moving:
             if abs(current_lane.coin.x - self.px) < 0.8:
                 self.coins_collected += 1
                 current_lane.coin = None
 
-        for i in range(int(self.py) - 10, int(self.py) + 20):
+        # Generate world in Negative Y direction (Forward)
+        for i in range(int(self.py) - 20, int(self.py) + 10):
             if i not in self.lanes: 
-                self.lanes[i] = Lane(i, random.choice(['grass', 'road', 'water', 'rail']))
+                self.lanes[i] = Lane(i, random.choice(['grass', 'road', 'road', 'water', 'rail']))
             self.lanes[i].update()
         
+        # Camera smoothing
         vpx = self.px + (self.tx-self.px)*self.jump_anim if self.is_moving else self.px
         vpy = self.py + (self.ty-self.py)*self.jump_anim if self.is_moving else self.py
         spx, spy = to_screen(vpx, vpy)
@@ -286,11 +296,13 @@ class Game:
 
     def draw(self):
         self.screen.fill(COLOR_BG)
-        render_list = []
-        vpx = self.px + (self.tx-self.px)*self.jump_anim if self.is_moving else self.px
-        vpy = self.py + (self.ty-self.py)*self.jump_anim if self.is_moving else self.py
         
-        for y in range(int(self.py) - 12, int(self.py) + 15):
+        # Collect everything to draw for depth sorting
+        render_list = []
+        
+        # Determine Render Range based on Player Y
+        # Since Forward is -Y, we render from (py - 15) to (py + 15) roughly
+        for y in range(int(self.py) - 15, int(self.py) + 15):
             if y in self.lanes:
                 lane = self.lanes[y]
                 lane.draw_terrain(self.screen, self.cam_x, self.cam_y)
@@ -298,15 +310,28 @@ class Game:
                 for obj in lane.objects: render_list.append(obj)
 
         render_list.append("PLAYER")
+
         def get_depth(item):
-            if item == "PLAYER": return vpx + vpy
+            # The "Correct" Visual Sort for this Projection:
+            # (gx - gy), (gx + gy) means:
+            # X+Y is depth. Smaller sum = Top/Back. Larger sum = Bottom/Front.
+            if item == "PLAYER": 
+                cx = self.px + (self.tx - self.px) * self.jump_anim if self.is_moving else self.px
+                cy = self.py + (self.ty - self.py) * self.jump_anim if self.is_moving else self.py
+                return cx + cy
             return item.x + (item.lane_y if hasattr(item, 'lane_y') else item.y)
+
+        # Sort Ascending (Small depth first -> Back to Front)
         render_list.sort(key=get_depth)
 
         for item in render_list:
-            if item == "PLAYER": self.draw_player(vpx, vpy)
-            else: item.draw(self.screen, self.cam_x, self.cam_y)
+            if item == "PLAYER":
+                self.draw_player(self.px + (self.tx - self.px) * self.jump_anim if self.is_moving else self.px,
+                                 self.py + (self.ty - self.py) * self.jump_anim if self.is_moving else self.py)
+            else:
+                item.draw(self.screen, self.cam_x, self.cam_y)
                 
+        # UI
         self.draw_pixel_text(str(self.score), (255, 255, 255), 20, 20)
         coin_rect = self.draw_pixel_text(str(self.coins_collected), (255, 220, 0), SCREEN_WIDTH - 80, 20, align="right")
         ui_coin_x = coin_rect.right + 15
